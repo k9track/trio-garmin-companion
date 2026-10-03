@@ -1,0 +1,4 @@
+# Simulator-only build with fake Trio replies for README screenshots. Never sideload.
+project.manifest = manifest.xml
+base.sourcePath = source;demo;../shared/source
+base.resourcePath = resources;../shared/resources
