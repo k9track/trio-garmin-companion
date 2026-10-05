@@ -96,11 +96,11 @@ class AmountView extends WatchUi.View {
     }
 }
 
-class AmountDelegate extends WatchUi.BehaviorDelegate {
+class AmountDelegate extends IdleDelegate {
     private var _view as AmountView;
 
     function initialize(view as AmountView) {
-        BehaviorDelegate.initialize();
+        IdleDelegate.initialize();
         _view = view;
     }
 
@@ -175,17 +175,18 @@ class ConfirmView extends WatchUi.View {
     }
 }
 
-class ConfirmDelegate extends WatchUi.BehaviorDelegate {
+class ConfirmDelegate extends IdleDelegate {
     private var _view as ConfirmView;
     private var _timer as Timer.Timer?;
     private var _sent as Boolean = false;
 
     function initialize(view as ConfirmView) {
-        BehaviorDelegate.initialize();
+        IdleDelegate.initialize();
         _view = view;
     }
 
     function onKeyPressed(evt as WatchUi.KeyEvent) as Boolean {
+        Idle.touch();
         if (evt.getKey() == WatchUi.KEY_ENTER) {
             startHold();
             return true;
@@ -202,6 +203,7 @@ class ConfirmDelegate extends WatchUi.BehaviorDelegate {
     }
 
     function onHold(evt as WatchUi.ClickEvent) as Boolean {
+        Idle.touch();
         startHold();
         return true;
     }
@@ -308,9 +310,9 @@ class StatusView extends WatchUi.View {
     }
 }
 
-class StatusDelegate extends WatchUi.BehaviorDelegate {
+class StatusDelegate extends IdleDelegate {
     function initialize() {
-        BehaviorDelegate.initialize();
+        IdleDelegate.initialize();
     }
 
     function onSelect() as Boolean {
@@ -367,11 +369,11 @@ class PinView extends WatchUi.View {
     }
 }
 
-class PinDelegate extends WatchUi.BehaviorDelegate {
+class PinDelegate extends IdleDelegate {
     private var _view as PinView;
 
     function initialize(view as PinView) {
-        BehaviorDelegate.initialize();
+        IdleDelegate.initialize();
         _view = view;
     }
 
@@ -409,9 +411,77 @@ class PinDelegate extends WatchUi.BehaviorDelegate {
     }
 }
 
+// MARK: - Lock
+
+const UNLOCK_TAPS = 3;
+const UNLOCK_GAP_MS = 1000;
+
+// First screen after launch. The face opens the app on a touch and hold, which
+// something pressing on the watch can trigger; three quick taps (or START
+// presses) are needed before the bolus screens appear.
+class LockView extends WatchUi.View {
+    var taps as Number = 0;
+
+    function initialize() {
+        View.initialize();
+    }
+
+    function onUpdate(dc as Graphics.Dc) as Void {
+        clearScreen(dc);
+        var w = dc.getWidth();
+        var h = dc.getHeight();
+        centerText(dc, (h * 0.22).toNumber(), Graphics.FONT_MEDIUM, Graphics.COLOR_WHITE, "Trio bolus");
+        var r = 18;
+        var gap = 70;
+        for (var i = 0; i < UNLOCK_TAPS; i++) {
+            var x = w / 2 + (i - 1) * gap;
+            dc.setColor(i < taps ? C_SEL : 0x555555, Graphics.COLOR_TRANSPARENT);
+            if (i < taps) {
+                dc.fillCircle(x, h / 2 - 20, r);
+            } else {
+                dc.setPenWidth(3);
+                dc.drawCircle(x, h / 2 - 20, r);
+            }
+        }
+        centerText(dc, (h * 0.62).toNumber(), Graphics.FONT_SMALL, Graphics.COLOR_WHITE, "Tap 3 times quickly");
+        centerText(dc, (h * 0.78).toNumber(), Graphics.FONT_XTINY, C_DIM, "BACK to close");
+    }
+}
+
+class LockDelegate extends IdleDelegate {
+    private var _view as LockView;
+    private var _lastTap as Number = 0;
+
+    function initialize(view as LockView) {
+        IdleDelegate.initialize();
+        _view = view;
+    }
+
+    function onSelect() as Boolean {
+        var now = System.getTimer();
+        if (now - _lastTap > UNLOCK_GAP_MS) {
+            _view.taps = 0;
+        }
+        _lastTap = now;
+        _view.taps += 1;
+        if (_view.taps >= UNLOCK_TAPS) {
+            WatchUi.popView(WatchUi.SLIDE_IMMEDIATE);
+            BolusFlow.begin(:bolus);
+        } else {
+            WatchUi.requestUpdate();
+        }
+        return true;
+    }
+
+    function onBack() as Boolean {
+        System.exit();
+    }
+}
+
 // MARK: - Menu
 
 function openTrioMenu() as Void {
+    Idle.touch();
     var menu = new WatchUi.Menu2({ :title => "Trio" });
     menu.addItem(new WatchUi.MenuItem("Bolus", null, :bolus, null));
     menu.addItem(new WatchUi.MenuItem("Carbs + Bolus", null, :carbs, null));
@@ -419,9 +489,9 @@ function openTrioMenu() as Void {
     WatchUi.pushView(menu, new TrioMenuDelegate(), WatchUi.SLIDE_UP);
 }
 
-class TrioDelegate extends WatchUi.BehaviorDelegate {
+class TrioDelegate extends IdleDelegate {
     function initialize() {
-        BehaviorDelegate.initialize();
+        IdleDelegate.initialize();
     }
 
     function onSelect() as Boolean {
@@ -441,6 +511,7 @@ class TrioMenuDelegate extends WatchUi.Menu2InputDelegate {
     }
 
     function onSelect(item as WatchUi.MenuItem) as Void {
+        Idle.touch();
         WatchUi.popView(WatchUi.SLIDE_IMMEDIATE);
         BolusFlow.begin(item.getId() as Symbol);
     }

@@ -32,12 +32,15 @@ that only exists in the simulator build (`./build.sh screenshots`).
 
 ## Give a bolus
 
-From the Trio Companion Face, **touch and hold** the screen. The app opens straight on the insulin amount.
+From the Trio Companion Face, **touch and hold** the screen. The app opens on a lock screen: **tap 3 times quickly**
+(or press START 3 times) to get to the insulin amount. This stops the app opening by itself when something presses
+against the watch. If nothing is pressed for 20 seconds, the app closes and you're back on the face; it never closes
+while a bolus is being sent or its result is showing.
 
 | | | |
 |:-:|:-:|:-:|
 | <img src="screenshots/01-watch-face.png" width="220"> | <img src="screenshots/02-amount.png" width="220"> | <img src="screenshots/03-confirm.png" width="220"> |
-| Touch and hold the face | UP/DOWN sets the amount (quick presses jump by 0.5 U), START | Check the dose |
+| Touch and hold the face, then tap 3 times | UP/DOWN sets the amount (quick presses jump by 0.5 U), START | Check the dose |
 | <img src="screenshots/04-holding.png" width="220"> | <img src="screenshots/05-delivering.png" width="220"> | <img src="screenshots/06-done.png" width="220"> |
 | **Hold START** about a second; a short press does nothing | Trio checked it and sent it to the pump | Pump started the bolus |
 

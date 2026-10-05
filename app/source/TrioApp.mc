@@ -23,6 +23,7 @@ class TrioApp extends Application.AppBase {
 
     function getInitialView() as [WatchUi.Views] or [WatchUi.Views, WatchUi.InputDelegates] {
         TrioDemo.seed();
+        Idle.start();
         Communications.registerForPhoneAppMessages(method(:onPhoneMessage));
         if (System.getDeviceSettings().phoneConnected) {
             Communications.transmit("status", null, new StatusListener());

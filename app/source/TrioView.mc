@@ -12,8 +12,8 @@ class TrioView extends WatchUi.View {
         View.initialize();
     }
 
-    // Launches straight into the bolus amount (the face already shows the data);
-    // BACK from there lands on this screen.
+    // Launches on the 3-tap lock, then the bolus amount (the face already shows
+    // the data); BACK from the bolus screens lands on this screen.
     private var _openBolus as Boolean = true;
 
     function onShow() as Void {
@@ -37,7 +37,8 @@ class TrioView extends WatchUi.View {
 
     function openBolus() as Void {
         _launchTimer = null;
-        BolusFlow.begin(:bolus);
+        var lock = new LockView();
+        WatchUi.pushView(lock, new LockDelegate(lock), WatchUi.SLIDE_IMMEDIATE);
     }
 
     function tick() as Void {

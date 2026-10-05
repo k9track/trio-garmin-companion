@@ -14,7 +14,8 @@ the way Trio's Apple Watch app can.
 - **Watch face:** time; IOB / COB / temp basal; delta, glucose, trend arrow, loop age and loop ring;
   2-hour graph; heart rate and battery. Dims to time / glucose / arrow in always-on mode, shifting each
   minute to avoid AMOLED burn-in.
-- **Watch app:** touch and hold the face → set the amount → START → **hold START** to deliver.
+- **Watch app:** touch and hold the face → **tap 3 times** → set the amount → START → **hold START** to deliver.
+  It closes itself after 20 seconds without input, so an accidental launch ends on its own.
   Carbs + Bolus and a carbs-only entry are in its menu.
 - Data comes straight from the Trio iPhone app over Bluetooth through Garmin Connect. No servers.
 
@@ -34,7 +35,8 @@ Trio does all the checking; the watch only asks. A request is refused, with noth
 - no bolus of 20 % or more of this one was given in the last few minutes (Trio's standard remote-bolus check);
 - carbs are within Trio's **Max Carbs**.
 
-On the watch, a dose is only sent after START is held for about a second, it is sent once, and if the
+On the watch, the bolus screens open only after three quick taps, the app closes after 20 seconds of no input,
+a dose is only sent after START is held for about a second, it is sent once, and if the
 result is unknown the watch says **Check Trio** instead of retrying. Details: [PROTOCOL.md](PROTOCOL.md).
 
 ## What you need
