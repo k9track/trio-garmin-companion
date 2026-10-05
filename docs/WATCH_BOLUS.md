@@ -87,6 +87,23 @@ trying again; the watch never resends on its own. If the message says carbs were
 
 On the bolus screens, IOB is marked "(old)" (and greyed on the face) when Trio's loop data is more than 15 minutes old.
 
+## Caregivers and parents
+
+The watch talks only to the one iPhone it's paired with in the Garmin Connect app, over **Bluetooth**
+(watch → Bluetooth → Garmin Connect → Trio on that phone). Nothing goes over the internet, so:
+
+- **A parent's watch paired to the parent's own iPhone can't reach the child's Trio.** It shows no data and
+  can't bolus.
+- **A watch paired to the child's iPhone** (the one running Trio) works, but only within Bluetooth range,
+  roughly 10 m: same room or house, not school or across town. Garmin watches pair with one phone at a time,
+  so the parent's watch would have to be moved over to the child's phone in Garmin Connect.
+- Whoever wears a paired watch can bolus up to the watch maximum; the key identifies the watch, not the person.
+  Every watch bolus still goes through all of Trio's checks and shows a notification on the child's phone.
+
+**To bolus from anywhere**, use Trio's own **remote commands** instead: a caregiver sends a bolus or carbs from
+their phone over the internet (set up under Trio's Remote Control settings, used with apps such as LoopFollow).
+They go through the same Trio bolus safety checks as the watch.
+
 ## In Trio
 
 Trio posts a notification for every bolus and carb entry from the watch, and when a watch is paired.
