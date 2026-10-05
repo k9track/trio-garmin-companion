@@ -108,8 +108,6 @@ They go through the same Trio bolus safety checks as the watch.
 
 Trio posts a notification for every bolus and carb entry from the watch, and when a watch is paired.
 
-## In Trio
-
 <!-- Trio history screenshot: docs/screenshots/trio-history.png -->
 
 How the messages are built and checked: [PROTOCOL.md](../PROTOCOL.md).
