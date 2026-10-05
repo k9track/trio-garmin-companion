@@ -4,24 +4,25 @@ import Toybox.Lang;
 import Toybox.Math;
 import Toybox.System;
 import Toybox.Time;
+import Toybox.Time.Gregorian;
 
-// Draws the Trio screen shared by the watch face and the watch app. Layout
-// mirrors the Trio watch face rows (time; IOB / COB / temp basal; delta /
-// glucose / trend / loop age + ring), with a 2 h trend graph and heart rate /
-// battery below.
+// Draws the Trio screen shared by the watch face and the watch app:
+// loop status as an arc along the top edge; date and time; a large glucose
+// value with trend arrow, delta and reading age; IOB / COB / basal with small
+// labels; heart rate and battery at the bottom.
 class TrioScreen {
     const LOW = 70;
     const HIGH = 180;
-    const GRAPH_MIN = 40;
-    const GRAPH_MAX = 250;
-    const GRAPH_SPAN_SECS = 7200;
+    const STALE_SECS = 15 * 60;
 
-    const C_IOB = 0x22AAFF;
+    const C_IOB = 0x3AA0FF;
     const C_COB = 0xFFAA00;
     const C_LOW = 0xFF3B30;
     const C_HIGH = 0xFFCC00;
     const C_OK = 0x00DD55;
-    const C_LINE = 0x555555;
+    const C_LABEL = 0x888888;
+    const C_STALE = 0x888888;
+    const C_TRACK = 0x1C1C1C;
 
     function initialize() {}
 
@@ -42,69 +43,109 @@ class TrioScreen {
             return;
         }
 
-        var fRow = Graphics.FONT_LARGE;
-        var fBg = pickGlucoseFont(dc, w, d, now, mmol, fRow, Graphics.FONT_MEDIUM);
-        var fSide = Graphics.FONT_MEDIUM;
-        var hRow = dc.getFontHeight(fRow);
-        var hBg = dc.getFontHeight(fBg);
-        var hSide = dc.getFontHeight(fSide);
-
-        // Rows stack from the top using measured font heights so larger fonts
-        // never collide; the graph takes whatever height is left.
-        var y = (h * 0.07).toNumber();
-        drawClock(dc, cx, y + hRow / 2, fRow);
-        y += hRow;
-
-        // Row 1: IOB / COB / temp basal, spread evenly across the screen at this height
-        var r1 = y + hRow / 2;
-        var iobText = d == null || d["iob"] == null ? "--u" : (d["iob"] as Float).format("%.1f") + "u";
-        var cobText = d == null || d["cob"] == null ? "--g" : (d["cob"] as Float).format("%.0f") + "g";
-        var tbrText = d == null || d["tbr"] == null ? "--" : formatRate(d["tbr"] as Float);
-        var glyphW = 30;
-        var iobW = dc.getTextWidthInPixels(iobText, fRow);
-        var cobW = dc.getTextWidthInPixels(cobText, fRow);
-        var tbrW = glyphW + dc.getTextWidthInPixels(tbrText, fRow);
-        var rowSpan = 2 * (chordHalf(w, r1) - 14);
-        var rowGap = (rowSpan - iobW - cobW - tbrW) / 2;
-        rowGap = rowGap < 10 ? 10 : rowGap > 46 ? 46 : rowGap;
-        var rx = cx - (iobW + cobW + tbrW + 2 * rowGap) / 2;
-        drawLeft(dc, rx, r1, fRow, C_IOB, iobText);
-        rx += iobW + rowGap;
-        drawLeft(dc, rx, r1, fRow, C_COB, cobText);
-        rx += cobW + rowGap;
-        drawBasalGlyph(dc, rx + 12, r1);
-        drawLeft(dc, rx + glyphW, r1, fRow, Graphics.COLOR_WHITE, tbrText);
-        y += hRow + 2;
-
-        drawRule(dc, w, y);
-
-        // Row 2: delta / glucose + arrow / loop age + ring
-        var r2 = y + (hBg * 0.47).toNumber();
-        drawGlucoseRow(dc, w, r2, hBg, d, now, mmol, fRow, fBg, fSide);
-        y = r2 + (hBg * 0.36).toNumber();
-
-        drawRule(dc, w, y);
-
-        // 2 h trend graph fills the gap above the vitals row
-        var vitalsY = (h * 0.885).toNumber();
-        var gx = (w * 0.14).toNumber();
-        var gw = (w * 0.72).toNumber();
-        var gy = y + 6;
-        var gh = vitalsY - hSide / 2 - 6 - gy;
-        if (gh < 30) {
-            gh = 30;
-        }
-        if (d != null && d["hist"] instanceof Array && (d["hist"] as Array).size() > 0) {
-            drawGraph(dc, d["hist"] as Array<Number>, d["histT"] as Array<Number>, gx, gy, gw, gh, now);
-        } else {
-            drawCentered(dc, cx, gy + gh / 2, Graphics.FONT_SMALL, 0x888888, "Waiting for Trio...");
-        }
-
-        drawVitals(dc, cx, vitalsY, fSide);
+        drawLoopArc(dc, w, h, loopMinutes(d, now));
+        drawCentered(dc, cx, (h * 0.13).toNumber(), Graphics.FONT_XTINY, C_LABEL, dateText());
+        drawClock(dc, cx, (h * 0.205).toNumber(), Graphics.FONT_SMALL);
+        drawGlucose(dc, w, (h * 0.425).toNumber(), d, now, mmol);
+        drawTreatments(dc, w, h, d);
+        drawVitals(dc, cx, (h * 0.868).toNumber(), Graphics.FONT_TINY);
 
         if (d != null && d["demo"] == true) {
-            drawCentered(dc, cx, (h * 0.04).toNumber() + 6, Graphics.FONT_XTINY, C_LOW, "DEMO DATA");
+            drawCentered(dc, cx, (h * 0.955).toNumber(), Graphics.FONT_XTINY, C_LOW, "DEMO DATA");
         }
+    }
+
+    // Thin arc along the top edge: green if the loop ran in the last 7 min,
+    // yellow under 15, red after that, grey with no data. A dim track shows
+    // the rest of the ring.
+    private function drawLoopArc(dc as Graphics.Dc, w as Number, h as Number, mins as Number?) as Void {
+        var r = w / 2 - 9;
+        dc.setPenWidth(8);
+        dc.setColor(C_TRACK, Graphics.COLOR_TRANSPARENT);
+        dc.drawCircle(w / 2, h / 2, r);
+        var color = mins == null ? C_STALE : mins < 7 ? C_OK : mins < 15 ? C_HIGH : C_LOW;
+        dc.setColor(color, Graphics.COLOR_TRANSPARENT);
+        dc.drawArc(w / 2, h / 2, r, Graphics.ARC_CLOCKWISE, 150, 30);
+        dc.setPenWidth(1);
+    }
+
+    // "Mon 5th"
+    private function dateText() as String {
+        var info = Gregorian.info(Time.now(), Time.FORMAT_MEDIUM);
+        var day = info.day as Number;
+        var suffix = "th";
+        if (day % 100 < 11 || day % 100 > 13) {
+            var last = day % 10;
+            suffix = last == 1 ? "st" : last == 2 ? "nd" : last == 3 ? "rd" : "th";
+        }
+        return info.day_of_week + " " + day + suffix;
+    }
+
+    // Big glucose value with the arrow above the delta to its right, and the
+    // reading's age underneath. Grey when the reading is over 15 min old.
+    private function drawGlucose(dc as Graphics.Dc, w as Number, y as Number, d as Dictionary?, now as Number,
+            mmol as Boolean) as Void {
+        var sgv = d == null ? null : d["sgv"] as Number?;
+        var bgTime = d == null ? null : d["bgTime"] as Number?;
+        var stale = bgTime == null || now - bgTime > STALE_SECS;
+        var color = sgv == null || stale ? C_STALE : colorFor(sgv);
+        var bgText = glucoseText(d, mmol);
+        var deltaText = deltaTextFor(d, mmol);
+
+        var side = 70;
+        var font = Graphics.FONT_NUMBER_HOT;
+        if (dc.getTextWidthInPixels(bgText, font) + side > (w * 0.80).toNumber()) {
+            font = Graphics.FONT_NUMBER_MEDIUM;
+        }
+        var bgW = dc.getTextWidthInPixels(bgText, font);
+        var left = w / 2 - (bgW + side) / 2;
+        drawLeft(dc, left, y, font, color, bgText);
+
+        var sx = left + bgW + side / 2 + 4;
+        if (d != null && d["dir"] != null && !stale) {
+            drawTrend(dc, sx, y - 26, d["dir"] as String, color, 44);
+        }
+        drawCentered(dc, sx, y + 30, Graphics.FONT_SMALL, 0xCCCCCC, deltaText);
+
+        var age = bgTime == null ? "No reading" : ageText((now - bgTime) / 60);
+        var ageY = y + (dc.getFontHeight(font) * 0.42).toNumber();
+        drawCentered(dc, w / 2, ageY, Graphics.FONT_XTINY, stale ? C_HIGH : C_LABEL, age);
+    }
+
+    private function ageText(mins as Number) as String {
+        if (mins < 1) {
+            return "Just now";
+        }
+        return mins < 120 ? mins + " min ago" : (mins / 60) + " h ago";
+    }
+
+    // IOB / COB / basal: coloured values over small grey labels, with thin
+    // dividers between the three columns.
+    private function drawTreatments(dc as Graphics.Dc, w as Number, h as Number, d as Dictionary?) as Void {
+        var iob = d == null || d["iob"] == null ? "--" : (d["iob"] as Float).format("%.1f") + "u";
+        var cob = d == null || d["cob"] == null ? "--" : (d["cob"] as Float).format("%.0f") + "g";
+        var tbr = d == null || d["tbr"] == null ? "--" : formatRate(d["tbr"] as Float);
+        var valueY = (h * 0.68).toNumber();
+        // From measured heights: the font boxes carry extra space, but the
+        // value's digits and the label's caps must never touch.
+        var labelY = valueY + (dc.getFontHeight(Graphics.FONT_TINY) * 0.5).toNumber()
+            + (dc.getFontHeight(Graphics.FONT_XTINY) * 0.5).toNumber() + 4;
+        var col = (w * 0.25).toNumber();
+        var xs = [w / 2 - col, w / 2, w / 2 + col];
+        var labels = ["IOB", "COB", "BASAL"];
+        var values = [iob, cob, tbr];
+        var colors = [C_IOB, C_COB, Graphics.COLOR_WHITE];
+        for (var i = 0; i < 3; i++) {
+            drawCentered(dc, xs[i], valueY, Graphics.FONT_TINY, colors[i], values[i]);
+            drawCentered(dc, xs[i], labelY, Graphics.FONT_XTINY, C_LABEL, labels[i]);
+        }
+        var top = valueY - (dc.getFontHeight(Graphics.FONT_TINY) * 0.4).toNumber();
+        var bottom = labelY + (dc.getFontHeight(Graphics.FONT_XTINY) * 0.35).toNumber();
+        dc.setColor(0x333333, Graphics.COLOR_TRANSPARENT);
+        dc.setPenWidth(2);
+        dc.drawLine(w / 2 - col / 2, top, w / 2 - col / 2, bottom);
+        dc.drawLine(w / 2 + col / 2, top, w / 2 + col / 2, bottom);
+        dc.setPenWidth(1);
     }
 
     // Always-on view: time, glucose and arrow only, dimmed, and nudged a few
@@ -125,67 +166,6 @@ class TrioScreen {
             var bgW = dc.getTextWidthInPixels(bgText, Graphics.FONT_NUMBER_MEDIUM);
             drawTrend(dc, cx + bgW / 2 + 26, cy + (h * 0.04).toNumber(), d["dir"] as String, color, 34);
         }
-    }
-
-    private function drawGlucoseRow(dc as Graphics.Dc, w as Number, y as Number, hBg as Number, d as Dictionary?,
-            now as Number, mmol as Boolean, fDelta as Graphics.FontType, fBg as Graphics.FontType,
-            fAge as Graphics.FontType) as Void {
-        var sgv = d == null ? null : d["sgv"] as Number?;
-        var bgStale = d == null || d["bgTime"] == null || now - (d["bgTime"] as Number) > 15 * 60;
-        var bgText = glucoseText(d, mmol);
-        var bgColor = sgv == null || bgStale ? 0x888888 : colorFor(sgv);
-        var deltaText = deltaTextFor(d, mmol);
-        var mins = loopMinutes(d, now);
-        var ageText = mins == null ? "--" : mins + "m";
-        var ringColor = mins == null ? 0x888888 : mins < 7 ? C_OK : mins < 15 ? C_HIGH : C_LOW;
-
-        var gap = 14;
-        var arrowW = (hBg * 0.34).toNumber();
-        var ringR = 18;
-        var deltaW = dc.getTextWidthInPixels(deltaText, fDelta);
-        var bgW = dc.getTextWidthInPixels(bgText, fBg);
-        var ageW = dc.getTextWidthInPixels(ageText, fAge);
-        var total = glucoseRowWidth(dc, d, now, mmol, fDelta, fBg, fAge);
-        var x = w / 2 - total / 2;
-
-        drawLeft(dc, x, y, fDelta, Graphics.COLOR_WHITE, deltaText);
-        x += deltaW + gap;
-        drawLeft(dc, x, y, fBg, bgColor, bgText);
-        x += bgW + gap;
-        if (d != null && d["dir"] != null && !bgStale) {
-            drawTrend(dc, x + arrowW / 2, y, d["dir"] as String, bgColor, arrowW);
-        }
-        x += arrowW + gap;
-        drawLeft(dc, x, y, fAge, Graphics.COLOR_WHITE, ageText);
-        x += ageW + 8;
-        dc.setColor(ringColor, Graphics.COLOR_TRANSPARENT);
-        dc.setPenWidth(7);
-        dc.drawCircle(x + ringR, y, ringR);
-        dc.setPenWidth(1);
-    }
-
-    // Biggest number font whose glucose row fits across the screen.
-    private function pickGlucoseFont(dc as Graphics.Dc, w as Number, d as Dictionary?, now as Number,
-            mmol as Boolean, fDelta as Graphics.FontType, fAge as Graphics.FontType) as Graphics.FontType {
-        var fits = (w * 0.84).toNumber();
-        var candidates = [Graphics.FONT_NUMBER_HOT, Graphics.FONT_NUMBER_MEDIUM, Graphics.FONT_NUMBER_MILD];
-        for (var i = 0; i < candidates.size(); i++) {
-            var f = candidates[i] as Graphics.FontType;
-            if (glucoseRowWidth(dc, d, now, mmol, fDelta, f, fAge) <= fits) {
-                return f;
-            }
-        }
-        return Graphics.FONT_NUMBER_MILD;
-    }
-
-    private function glucoseRowWidth(dc as Graphics.Dc, d as Dictionary?, now as Number, mmol as Boolean,
-            fDelta as Graphics.FontType, fBg as Graphics.FontType, fAge as Graphics.FontType) as Number {
-        var mins = loopMinutes(d, now);
-        var gap = 14;
-        var arrowW = (dc.getFontHeight(fBg) * 0.34).toNumber();
-        return dc.getTextWidthInPixels(deltaTextFor(d, mmol), fDelta) + gap
-            + dc.getTextWidthInPixels(glucoseText(d, mmol), fBg) + gap + arrowW + gap
-            + dc.getTextWidthInPixels(mins == null ? "--" : mins + "m", fAge) + 8 + 36;
     }
 
     private function glucoseText(d as Dictionary?, mmol as Boolean) as String {
@@ -266,51 +246,21 @@ class TrioScreen {
         drawLeft(dc, x, y, f, Graphics.COLOR_WHITE, hrText);
         x += dc.getTextWidthInPixels(hrText, f) + 22;
 
-        // battery
-        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+        // battery, in grey so it sits behind the glucose data
+        dc.setColor(C_LABEL, Graphics.COLOR_TRANSPARENT);
         dc.setPenWidth(2);
         dc.drawRoundedRectangle(x, y - 8, 26, 16, 3);
         dc.fillRectangle(x + 26, y - 3, 3, 6);
         dc.fillRectangle(x + 3, y - 5, (20 * battery / 100).toNumber(), 10);
         dc.setPenWidth(1);
         x += battIconW + 6;
-        drawLeft(dc, x, y, f, Graphics.COLOR_WHITE, battText);
+        drawLeft(dc, x, y, Graphics.FONT_XTINY, C_LABEL, battText);
     }
 
     private function groupWidth(dc as Graphics.Dc, f as Graphics.FontType, heartW as Number, battIconW as Number,
             hrText as String, battText as String) as Number {
         return heartW + 6 + dc.getTextWidthInPixels(hrText, f) + 22 + battIconW + 6
-            + dc.getTextWidthInPixels(battText, f);
-    }
-
-    // --- graph ------------------------------------------------------------
-
-    private function drawGraph(dc as Graphics.Dc, hist as Array<Number>, histT as Array<Number>,
-            x as Number, y as Number, w as Number, h as Number, now as Number) as Void {
-        var start = now - GRAPH_SPAN_SECS;
-        drawDashed(dc, x, yFor(LOW, y, h), w, C_LOW);
-        drawDashed(dc, x, yFor(HIGH, y, h), w, C_HIGH);
-        for (var i = 0; i < hist.size() && i < histT.size(); i++) {
-            var t = histT[i];
-            if (t < start) {
-                continue;
-            }
-            var px = x + (w * (t - start) / GRAPH_SPAN_SECS);
-            dc.setColor(colorFor(hist[i]), Graphics.COLOR_TRANSPARENT);
-            dc.fillCircle(px, yFor(hist[i], y, h), 5);
-        }
-    }
-
-    private function yFor(v as Number, y as Number, h as Number) as Number {
-        var c = v < GRAPH_MIN ? GRAPH_MIN : v > GRAPH_MAX ? GRAPH_MAX : v;
-        return y + h - (h * (c - GRAPH_MIN) / (GRAPH_MAX - GRAPH_MIN));
-    }
-
-    private function drawDashed(dc as Graphics.Dc, x as Number, y as Number, w as Number, color as Number) as Void {
-        dc.setColor(color, Graphics.COLOR_TRANSPARENT);
-        for (var i = 0; i < w; i += 10) {
-            dc.drawLine(x + i, y, x + i + 5, y);
-        }
+            + dc.getTextWidthInPixels(battText, Graphics.FONT_XTINY);
     }
 
     // --- glyphs -----------------------------------------------------------
@@ -358,28 +308,10 @@ class TrioScreen {
         dc.fillPolygon([[tipX, tipY], [bx - dy * wing, by + dx * wing], [bx + dy * wing, by - dx * wing]]);
     }
 
-    private function drawBasalGlyph(dc as Graphics.Dc, x as Number, y as Number) as Void {
-        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-        dc.setPenWidth(3);
-        dc.drawLine(x - 12, y + 8, x - 6, y + 8);
-        dc.drawLine(x - 6, y + 8, x - 6, y - 6);
-        dc.drawLine(x - 6, y - 6, x + 4, y - 6);
-        dc.drawLine(x + 4, y - 6, x + 4, y + 8);
-        dc.drawLine(x + 4, y + 8, x + 10, y + 8);
-        dc.setPenWidth(1);
-    }
-
-    private function drawRule(dc as Graphics.Dc, w as Number, y as Number) as Void {
-        dc.setColor(C_LINE, Graphics.COLOR_TRANSPARENT);
-        dc.setPenWidth(2);
-        dc.drawLine((w * 0.12).toNumber(), y, (w * 0.88).toNumber(), y);
-        dc.setPenWidth(1);
-    }
-
     // --- formatting -------------------------------------------------------
 
     private function colorFor(sgv as Number) as Number {
-        return sgv < LOW ? C_LOW : sgv > HIGH ? C_HIGH : Graphics.COLOR_WHITE;
+        return sgv < LOW ? C_LOW : sgv > HIGH ? C_HIGH : C_OK;
     }
 
     private function formatBg(sgv as Number, mmol as Boolean) as String {

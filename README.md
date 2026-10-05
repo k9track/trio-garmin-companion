@@ -11,8 +11,9 @@ the way Trio's Apple Watch app can.
 <img src="docs/screenshots/06-done.png" width="200">
 </p>
 
-- **Watch face:** time; IOB / COB / temp basal; delta, glucose, trend arrow, loop age and loop ring;
-  2-hour graph; heart rate and battery. Dims to time / glucose / arrow in always-on mode, shifting each
+- **Watch face:** large glucose with trend arrow, delta and reading age; loop status as an arc along the top
+  (green / yellow / red); date and time; IOB / COB / basal; heart rate and battery.
+  Dims to time / glucose / arrow in always-on mode, shifting each
   minute to avoid AMOLED burn-in.
 - **Watch app:** touch and hold the face → **tap 3 times** → set the amount → START → **hold START** to deliver.
   It closes itself after 20 seconds without input, so an accidental launch ends on its own.
