@@ -3,9 +3,8 @@ import Toybox.Lang;
 import Toybox.Time;
 
 // Trio sends an array: entry 0 has every field (`date` = last loop run,
-// `glucoseDate` = reading time); later entries are history readings whose
-// `date` is the reading time. Compacted here so background memory and storage
-// only hold what the screen draws.
+// `glucoseDate` = reading time); later entries are history readings. Compacted
+// here so background memory and storage only hold what the screen draws.
 (:background)
 module TrioData {
     const KEY = "trio";
@@ -18,34 +17,29 @@ module TrioData {
         if (list.size() == 0 || !(list[0] instanceof Dictionary)) {
             return null;
         }
+        // Only entry 0 is drawn; history entries are ignored so storage stays small.
         var e0 = list[0] as Dictionary;
-        var hist = [] as Array<Number>;
-        var histT = [] as Array<Number>;
-        for (var i = 0; i < list.size(); i++) {
-            if (!(list[i] instanceof Dictionary)) {
-                continue;
-            }
-            var e = list[i] as Dictionary;
-            var s = toNum(e["sgv"]);
-            var t = toSecs(i == 0 ? e["glucoseDate"] : e["date"]);
-            if (s != null && t != null) {
-                hist.add(s);
-                histT.add(t);
-            }
-        }
         return {
             "sgv" => toNum(e0["sgv"]),
             "delta" => toNum(e0["delta"]),
-            "dir" => e0["direction"],
-            "units" => e0["units_hint"],
+            "dir" => e0["direction"] instanceof String ? e0["direction"] : null,
+            "units" => e0["units_hint"] instanceof String ? e0["units_hint"] : null,
             "iob" => toFloat(e0["iob"]),
             "cob" => toFloat(e0["cob"]),
             "tbr" => toFloat(e0["tbr"]),
             "loop" => toSecs(e0["date"]),
-            "bgTime" => toSecs(e0["glucoseDate"]),
-            "hist" => hist,
-            "histT" => histT
+            "bgTime" => toSecs(e0["glucoseDate"])
         };
+    }
+
+    // Older than 15 min, missing, or more than 2 min in the future (a clock that's
+    // wrong must not make old data look fresh).
+    function isStale(t as Object?, now as Number) as Boolean {
+        if (!(t instanceof Number)) {
+            return true;
+        }
+        var age = now - (t as Number);
+        return age > 15 * 60 || age < -120;
     }
 
     function save(data as Application.PersistableType) as Void {

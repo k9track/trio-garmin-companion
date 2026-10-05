@@ -24,6 +24,7 @@ class TrioApp extends Application.AppBase {
     function getInitialView() as [WatchUi.Views] or [WatchUi.Views, WatchUi.InputDelegates] {
         TrioDemo.seed();
         Idle.start();
+        Pairing.forgetLegacyPin();
         Communications.registerForPhoneAppMessages(method(:onPhoneMessage));
         if (System.getDeviceSettings().phoneConnected) {
             Communications.transmit("status", null, new StatusListener());
@@ -37,9 +38,14 @@ class TrioApp extends Application.AppBase {
     }
 
     function onPhoneMessage(msg as Communications.PhoneAppMessage) as Void {
-        // Bolus replies are dictionaries; loop data is an array.
+        // Replies to the watch's requests are dictionaries; loop data is an array.
         if (msg.data instanceof Dictionary) {
-            BolusFlow.onAck(msg.data as Dictionary);
+            var reply = msg.data as Dictionary;
+            if ("bolusAck".equals(reply["t"])) {
+                BolusFlow.onAck(reply);
+            } else if ("pairAck".equals(reply["t"])) {
+                Pairing.onAck(reply);
+            }
             return;
         }
         TrioData.save(TrioData.compact(msg.data));

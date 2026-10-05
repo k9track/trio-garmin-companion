@@ -30,11 +30,15 @@ the way Trio's Apple Watch app can.
 
 Trio does all the checking; the watch only asks. A request is refused, with nothing saved or delivered, unless:
 
-- **Watch Bolus** is switched on in Trio (it's off by default) and a 4-digit PIN is set there;
-- it is signed with that PIN (HMAC-SHA256), is under 60 seconds old and has never been used before;
+- **Watch Bolus** is switched on in Trio (it's off by default) and the watch has been paired;
+- it is signed with the random 256-bit key Trio gave the watch at pairing (HMAC-SHA256), is under 60 seconds
+  old and has never been used before. Five bad requests in a row switch watch bolus off and notify you;
 - insulin is within the **watch maximum** (default 3 U) and the pump's **Max Bolus**, and won't exceed **Max IOB**;
 - no bolus of 20 % or more of this one was given in the last few minutes (Trio's standard remote-bolus check);
-- carbs are within Trio's **Max Carbs**.
+- carbs are within the **watch carb max** (default 60 g) and Trio's **Max Carbs**.
+
+Trio notifies you of every bolus and carb entry from the watch. The 4-digit PIN is only used to pair, and never
+leaves the iPhone except as a one-time proof during the 2-minute pairing window.
 
 On the watch, the bolus screens open only after three quick taps, the app closes after 20 seconds of no input,
 a dose is only sent after START is held for about a second, it is sent once, and if the
@@ -66,7 +70,7 @@ Prebuilt files are on the [Releases](../../releases) page, or build them yoursel
 5. Open the **Trio Companion** app once from the apps list. Until it has run, touch-and-hold on the face
    can't find it. Do this again after every update.
 
-Then set up the PIN and turn Watch Bolus on, as described in [docs/WATCH_BOLUS.md](docs/WATCH_BOLUS.md).
+Then pair the watch and turn Watch Bolus on, as described in [docs/WATCH_BOLUS.md](docs/WATCH_BOLUS.md).
 
 ## Build it yourself
 
@@ -85,7 +89,8 @@ Then:
 
 Use `fenix843mm` or `fenix8pro47mm` for other sizes. Debug builds (without `release`) show labeled
 DEMO data in the simulator: `open "$SDK/bin/ConnectIQ.app"`, then `"$SDK/bin/monkeydo" bin/<file>.prg fenix847mm`.
-`./build.sh screenshots` makes a simulator-only build with a stand-in for Trio's replies; never install it.
+`./build.sh screenshots` makes a simulator-only build (own app ID, "SIMULATED" banner, output in
+`bin/simulator-only/`) with a stand-in for Trio's replies; never install it.
 
     shared/   drawing, data handling, background service, icon
     face/     Trio Companion Face (watch face)

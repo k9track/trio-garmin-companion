@@ -5,7 +5,7 @@ import Toybox.WatchUi;
 
 // Closes the app after 20 s without input, so an accidental launch from the
 // face (something pressing the screen) ends on its own. Never closes while a
-// request is in flight or its result is on screen (BolusFlow.stage != IDLE).
+// request or pairing is in flight or its result is on screen.
 module Idle {
     const LIMIT_MS = 20000;
     const CHECK_MS = 2000;
@@ -26,7 +26,7 @@ module Idle {
     }
 
     function check() as Void {
-        if (BolusDemo.active() || BolusFlow.stage != BolusFlow.IDLE) {
+        if (BolusDemo.active() || BolusFlow.stage != BolusFlow.IDLE || Pairing.state != Pairing.IDLE) {
             touch();
             return;
         }

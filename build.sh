@@ -14,9 +14,9 @@ SDK="${SDK:-$(ls -1dt "$SDK_ROOT"/connectiq-sdk-mac-* | head -1)}"
 KEY="${DEVELOPER_KEY:-$HOME/.garmin/developer_key}"
 if [[ "$TARGET" == "screenshots" ]]; then
   # Fake Trio replies for README screenshots. Simulator only, never sideload.
-  mkdir -p bin
-  "$SDK/bin/monkeyc" -f app/screenshots.jungle -d "$DEVICE" -y "$KEY" -o bin/screenshots.prg
-  echo "Built bin/screenshots.prg (simulator only)"
+  mkdir -p bin/simulator-only
+  "$SDK/bin/monkeyc" -f app/screenshots.jungle -d "$DEVICE" -y "$KEY" -o bin/simulator-only/SIMULATOR-DO-NOT-INSTALL.prg
+  echo "Built bin/simulator-only/SIMULATOR-DO-NOT-INSTALL.prg (simulator only)"
   exit 0
 fi
 if [[ "$TARGET" == "test" ]]; then

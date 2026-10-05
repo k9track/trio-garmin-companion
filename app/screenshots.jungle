@@ -1,4 +1,5 @@
 # Simulator-only build with fake Trio replies for README screenshots. Never sideload.
-project.manifest = manifest.xml
+# Its own app ID, so it can't replace the real app on a watch and Trio ignores it.
+project.manifest = screenshots-manifest.xml
 base.sourcePath = source;demo;../shared/source
 base.resourcePath = resources;../shared/resources

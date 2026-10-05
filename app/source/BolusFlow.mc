@@ -11,7 +11,6 @@ import Toybox.WatchUi;
 // send once, then show Trio's replies. Never resends on its own — a lost
 // reply means "check Trio", not "try again".
 module BolusFlow {
-    const PIN_KEY = "pin";
     const REPLY_TIMEOUT_MS = 30000;
 
     enum Stage {
@@ -30,20 +29,10 @@ module BolusFlow {
     var message as String = "";
     var _timer as Timer.Timer? = null;
 
-    // A PIN of any other length (from an older build) counts as unset.
-    function pin() as String? {
-        var p = Application.Storage.getValue(PIN_KEY);
-        return p instanceof String && (p as String).length() == PIN_LENGTH ? p as String : null;
-    }
-
-    function savePin(p as String) as Void {
-        Application.Storage.setValue(PIN_KEY, p);
-    }
-
-    // Entry from the menu: :bolus, :carbs or :pin. Called after the menu is popped.
+    // Entry from the menu: :bolus, :carbs or :pair. Called after the menu is popped.
     function begin(kind as Symbol) as Void {
-        if (kind == :pin || pin() == null) {
-            var pv = new PinView(kind != :pin);
+        if (kind == :pair || !Pairing.isPaired()) {
+            var pv = new PinView(kind != :pair);
             WatchUi.pushView(pv, new PinDelegate(pv), WatchUi.SLIDE_LEFT);
             return;
         }
@@ -70,13 +59,13 @@ module BolusFlow {
     }
 
     function send() as Void {
-        var p = pin();
+        var key = Pairing.key();
         requestId = TrioSign.newId();
         message = "";
         WatchUi.switchToView(new StatusView(), new StatusDelegate(), WatchUi.SLIDE_LEFT);
 
-        if (p == null) {
-            finish(FAILED, "No PIN set");
+        if (key == null) {
+            finish(FAILED, "Not paired with Trio");
             return;
         }
         if (BolusDemo.active()) {
@@ -92,7 +81,7 @@ module BolusFlow {
 
         var ts = Time.now().value();
         var id = requestId as String;
-        var sig = TrioSign.hmacHex(p, "bolus|" + id + "|" + centiUnits + "|" + carbs + "|" + ts);
+        var sig = TrioSign.hmacHexWithKey(key as String, "bolus|" + id + "|" + centiUnits + "|" + carbs + "|" + ts);
         stage = SENDING;
         Communications.transmit(
             { "t" => "bolus", "id" => id, "u" => centiUnits, "c" => carbs, "ts" => ts, "sig" => sig },
@@ -102,10 +91,15 @@ module BolusFlow {
         restartTimer();
     }
 
-    // From TrioApp.onPhoneMessage. Ignores replies to anything but the current request.
+    // From TrioApp.onPhoneMessage. Ignores replies to anything but the current
+    // request, and anything after a definite result. Only a clean "rejected"
+    // means nothing happened; any other outcome sends the user to check Trio.
     function onAck(ack as Dictionary) as Void {
         var id = ack["id"];
         if (requestId == null || !(id instanceof String) || !(requestId as String).equals(id)) {
+            return;
+        }
+        if (stage == DONE || stage == FAILED) {
             return;
         }
         var msg = ack["msg"] instanceof String ? ack["msg"] as String : "";
@@ -115,10 +109,12 @@ module BolusFlow {
             message = msg;
             restartTimer();
             WatchUi.requestUpdate();
-        } else if ("done".equals(st)) {
+        } else if ("done".equals(st) && ack["ok"] == true) {
             finish(DONE, msg);
-        } else {
+        } else if ("rejected".equals(st)) {
             finish(FAILED, msg.length() > 0 ? msg : "Rejected");
+        } else {
+            finish(NO_REPLY, msg.length() > 0 ? msg : "Check Trio before trying again.");
         }
     }
 

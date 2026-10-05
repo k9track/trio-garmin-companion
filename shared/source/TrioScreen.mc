@@ -13,7 +13,6 @@ import Toybox.Time.Gregorian;
 class TrioScreen {
     const LOW = 70;
     const HIGH = 180;
-    const STALE_SECS = 15 * 60;
 
     const C_IOB = 0x3AA0FF;
     const C_COB = 0xFFAA00;
@@ -87,7 +86,7 @@ class TrioScreen {
             mmol as Boolean) as Void {
         var sgv = d == null ? null : d["sgv"] as Number?;
         var bgTime = d == null ? null : d["bgTime"] as Number?;
-        var stale = bgTime == null || now - bgTime > STALE_SECS;
+        var stale = TrioData.isStale(bgTime, now);
         var color = sgv == null || stale ? C_STALE : colorFor(sgv);
         var bgText = glucoseText(d, mmol);
         var deltaText = deltaTextFor(d, mmol);
@@ -107,7 +106,7 @@ class TrioScreen {
         }
         drawCentered(dc, sx, y + 30, Graphics.FONT_SMALL, 0xCCCCCC, deltaText);
 
-        var age = bgTime == null ? "No reading" : ageText((now - bgTime) / 60);
+        var age = bgTime == null ? "No reading" : now < bgTime ? "Check watch time" : ageText((now - bgTime) / 60);
         var ageY = y + (dc.getFontHeight(font) * 0.42).toNumber();
         drawCentered(dc, w / 2, ageY, Graphics.FONT_XTINY, stale ? C_HIGH : C_LABEL, age);
     }
@@ -134,7 +133,9 @@ class TrioScreen {
         var xs = [w / 2 - col, w / 2, w / 2 + col];
         var labels = ["IOB", "COB", "BASAL"];
         var values = [iob, cob, tbr];
-        var colors = [C_IOB, C_COB, Graphics.COLOR_WHITE];
+        // Grey when the loop data is old, so stale IOB isn't trusted for dosing.
+        var loopStale = d == null || TrioData.isStale(d["loop"], Time.now().value());
+        var colors = loopStale ? [C_STALE, C_STALE, C_STALE] : [C_IOB, C_COB, Graphics.COLOR_WHITE];
         for (var i = 0; i < 3; i++) {
             drawCentered(dc, xs[i], valueY, Graphics.FONT_TINY, colors[i], values[i]);
             drawCentered(dc, xs[i], labelY, Graphics.FONT_XTINY, C_LABEL, labels[i]);
@@ -157,9 +158,12 @@ class TrioScreen {
         var cy = h / 2 + shift;
         drawClock(dc, cx, cy - (h * 0.20).toNumber(), Graphics.FONT_MEDIUM);
         var sgv = d == null ? null : d["sgv"] as Number?;
-        var bgStale = d == null || d["bgTime"] == null || now - (d["bgTime"] as Number) > 15 * 60;
+        var bgStale = d == null || TrioData.isStale(d["bgTime"], now);
         var bgText = glucoseText(d, mmol);
         var dim = 0xAAAAAA;
+        if (d != null && d["demo"] == true) {
+            drawCentered(dc, cx, cy + (h * 0.18).toNumber(), Graphics.FONT_XTINY, 0x993333, "DEMO DATA");
+        }
         var color = sgv == null || bgStale ? 0x666666 : sgv < LOW ? C_LOW : sgv > HIGH ? C_HIGH : dim;
         drawCentered(dc, cx, cy + (h * 0.04).toNumber(), Graphics.FONT_NUMBER_MEDIUM, color, bgText);
         if (d != null && d["dir"] != null && !bgStale) {

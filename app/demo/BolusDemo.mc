@@ -20,6 +20,17 @@ module BolusDemo {
         (_t1 as Timer.Timer).start(new Lang.Method(BolusDemo, :first), 4000, false);
     }
 
+    function respondPair(id as String) as Void {
+        _id = id;
+        _t1 = new Timer.Timer();
+        (_t1 as Timer.Timer).start(new Lang.Method(BolusDemo, :pairReply), 1500, false);
+    }
+
+    function pairReply() as Void {
+        Pairing.onAck({ "t" => "pairAck", "id" => _id, "ok" => true, "msg" => "Paired",
+            "key" => "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f" });
+    }
+
     function first() as Void {
         if (_centi > 300) {
             BolusFlow.onAck({ "t" => "bolusAck", "id" => _id, "ok" => false, "stage" => "rejected", "msg" => "Over watch max (3 U)" });

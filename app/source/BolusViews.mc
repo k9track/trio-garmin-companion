@@ -17,6 +17,10 @@ const C_SEL = 0x22AAFF;
 function clearScreen(dc as Graphics.Dc) as Void {
     dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_BLACK);
     dc.clear();
+    if (BolusDemo.active()) {
+        // Screenshot builds fake Trio's replies; never let one pass for the real app.
+        centerText(dc, (dc.getHeight() * 0.07).toNumber(), Graphics.FONT_XTINY, C_BAD, "SIMULATED");
+    }
 }
 
 function centerText(dc as Graphics.Dc, y as Number, font as Graphics.FontType, color as Number, text as String) as Void {
@@ -30,16 +34,17 @@ function contextLine() as String {
     if (d == null) {
         return "No Trio data";
     }
-    var parts = "";
+    var now = Time.now().value();
+    var parts = d["demo"] == true ? "DEMO " : "";
     if (d["sgv"] != null) {
         var sgv = d["sgv"] as Number;
         var bg = "mmol".equals(d["units"]) ? (sgv / 18.0).format("%.1f") : sgv.toString();
-        var bgTime = d["bgTime"];
-        var stale = bgTime instanceof Number && Time.now().value() - (bgTime as Number) > 900;
-        parts = "BG " + bg + (stale ? " (old)" : "");
+        parts += "BG " + bg + (TrioData.isStale(d["bgTime"], now) ? " (old)" : "");
     }
     if (d["iob"] != null) {
-        parts += (parts.length() > 0 ? "  " : "") + "IOB " + (d["iob"] as Float).format("%.2f");
+        // IOB comes from the loop; old IOB invites stacking, so say so.
+        parts += (parts.length() > 0 ? "  " : "") + "IOB " + (d["iob"] as Float).format("%.2f")
+            + (TrioData.isStale(d["loop"], now) ? " (old)" : "");
     }
     return parts;
 }
@@ -142,9 +147,19 @@ const HOLD_STEP_MS = 100;
 // from the amount screen can't send a bolus.
 class ConfirmView extends WatchUi.View {
     var progress as Number = 0;
+    // False while anything (an alert, a notification) covers this screen.
+    var visible as Boolean = true;
 
     function initialize() {
         View.initialize();
+    }
+
+    function onShow() as Void {
+        visible = true;
+    }
+
+    function onHide() as Void {
+        visible = false;
     }
 
     function onUpdate(dc as Graphics.Dc) as Void {
@@ -228,6 +243,13 @@ class ConfirmDelegate extends IdleDelegate {
         return true;
     }
 
+    // A swipe means the finger moved off; don't let the hold finish on its own.
+    function onSwipe(evt as WatchUi.SwipeEvent) as Boolean {
+        Idle.touch();
+        cancelHold();
+        return true;
+    }
+
     private function startHold() as Void {
         if (_sent || _timer != null) {
             return;
@@ -250,6 +272,10 @@ class ConfirmDelegate extends IdleDelegate {
     }
 
     function step() as Void {
+        if (!_view.visible) {
+            cancelHold();
+            return;
+        }
         _view.progress += 1;
         if (_view.progress >= HOLD_STEPS) {
             cancelHold();
@@ -334,8 +360,9 @@ class StatusDelegate extends IdleDelegate {
 
 const PIN_LENGTH = 4;
 
-// Entered on the watch because sideloaded apps get no settings page in Garmin
-// Connect. UP/DOWN picks each digit, START adds it; the 4th digit saves.
+// Pairing PIN, entered on the watch (sideloaded apps get no settings page in
+// Garmin Connect). UP/DOWN picks each digit, START adds it; the 4th digit sends
+// the pairing request. The PIN isn't stored.
 class PinView extends WatchUi.View {
     var digits as String = "";
     var choice as Number = 0;
@@ -354,7 +381,7 @@ class PinView extends WatchUi.View {
     function onUpdate(dc as Graphics.Dc) as Void {
         clearScreen(dc);
         var h = dc.getHeight();
-        centerText(dc, (h * 0.15).toNumber(), Graphics.FONT_MEDIUM, Graphics.COLOR_WHITE, "Set PIN");
+        centerText(dc, (h * 0.15).toNumber(), Graphics.FONT_MEDIUM, Graphics.COLOR_WHITE, "Pair with Trio");
         if (_required) {
             centerText(dc, (h * 0.25).toNumber(), Graphics.FONT_TINY, C_WARN, "Needed before bolus");
         }
@@ -364,7 +391,7 @@ class PinView extends WatchUi.View {
         }
         centerText(dc, (h * 0.37).toNumber(), Graphics.FONT_LARGE, C_DIM, shown);
         centerText(dc, (h * 0.55).toNumber(), Graphics.FONT_NUMBER_MEDIUM, C_SEL, choice.toString());
-        centerText(dc, (h * 0.71).toNumber(), Graphics.FONT_XTINY, C_DIM, "Same 4 digits as in Trio");
+        centerText(dc, (h * 0.71).toNumber(), Graphics.FONT_XTINY, C_DIM, "Tap Pair Watch in Trio, then its PIN");
         centerText(dc, (h * 0.81).toNumber(), Graphics.FONT_XTINY, C_DIM, "START add  BACK del");
     }
 }
@@ -390,9 +417,7 @@ class PinDelegate extends IdleDelegate {
     function onSelect() as Boolean {
         _view.digits += _view.choice.toString();
         if (_view.digits.length() >= PIN_LENGTH) {
-            BolusFlow.savePin(_view.digits);
-            BolusFlow.buzz(true);
-            WatchUi.popView(WatchUi.SLIDE_RIGHT);
+            Pairing.start(_view.digits);
         } else {
             WatchUi.requestUpdate();
         }
@@ -407,6 +432,58 @@ class PinDelegate extends IdleDelegate {
             _view.digits = _view.digits.substring(0, len - 1);
             WatchUi.requestUpdate();
         }
+        return true;
+    }
+}
+
+// MARK: - Pairing status
+
+class PairStatusView extends WatchUi.View {
+    function initialize() {
+        View.initialize();
+    }
+
+    function onUpdate(dc as Graphics.Dc) as Void {
+        clearScreen(dc);
+        var h = dc.getHeight();
+        var w = dc.getWidth();
+        var title = "Pairing...";
+        var color = Graphics.COLOR_WHITE;
+        if (Pairing.state == Pairing.PAIRED) {
+            title = "Paired";
+            color = C_OK;
+        } else if (Pairing.state == Pairing.FAILED) {
+            title = "Not paired";
+            color = C_BAD;
+        }
+        centerText(dc, (h * 0.34).toNumber(), Graphics.FONT_LARGE, color, title);
+        if (Pairing.message.length() > 0) {
+            dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+            var fitted = Graphics.fitTextToArea(Pairing.message, Graphics.FONT_TINY, (w * 0.80).toNumber(), (h * 0.30).toNumber(), true);
+            if (fitted != null) {
+                dc.drawText(w / 2, (h * 0.58).toNumber(), Graphics.FONT_TINY, fitted,
+                    Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+            }
+        }
+    }
+}
+
+class PairStatusDelegate extends IdleDelegate {
+    function initialize() {
+        IdleDelegate.initialize();
+    }
+
+    function onSelect() as Boolean {
+        return close();
+    }
+
+    function onBack() as Boolean {
+        return close();
+    }
+
+    private function close() as Boolean {
+        Pairing.reset();
+        WatchUi.popView(WatchUi.SLIDE_RIGHT);
         return true;
     }
 }
@@ -485,7 +562,7 @@ function openTrioMenu() as Void {
     var menu = new WatchUi.Menu2({ :title => "Trio" });
     menu.addItem(new WatchUi.MenuItem("Bolus", null, :bolus, null));
     menu.addItem(new WatchUi.MenuItem("Carbs + Bolus", null, :carbs, null));
-    menu.addItem(new WatchUi.MenuItem("Set PIN", BolusFlow.pin() == null ? "Not set" : "Set", :pin, null));
+    menu.addItem(new WatchUi.MenuItem("Pair with Trio", Pairing.isPaired() ? "Paired" : "Not paired", :pair, null));
     WatchUi.pushView(menu, new TrioMenuDelegate(), WatchUi.SLIDE_UP);
 }
 

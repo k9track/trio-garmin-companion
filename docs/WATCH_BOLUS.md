@@ -18,17 +18,22 @@ that only exists in the simulator build (`./build.sh screenshots`).
 
 ## Set up (once)
 
-1. **Trio:** Settings → Watch → Garmin → Trio Companion → **Watch Bolus**. Save a 4-digit PIN, check the watch maximum
-   (default 3 U) and turn **Allow Bolus from Garmin** on.
+1. **Trio:** Settings → Watch → Garmin → Trio Companion → **Watch Bolus**.
+   - Check the watch limits: **max per watch bolus** (default 3 U) and **max carbs per watch entry** (default 60 g).
+   - Save a 4-digit **PIN**. It's only used to pair; it stays on the iPhone and isn't synced to iCloud.
+   - Tap **Pair Watch**. Trio waits 2 minutes for the watch.
 
    <!-- Trio settings screenshot: docs/screenshots/trio-watch-bolus-settings.png -->
 
-2. **Watch:** open Trio Companion, hold UP → **Set PIN**, and enter the same 4 digits. UP/DOWN picks a digit, START adds it;
-   the 4th digit saves.
+2. **Watch:** open Trio Companion, tap 3 times, hold UP for the menu → **Pair with Trio**, and enter the PIN.
+   UP/DOWN picks a digit, START adds it; the 4th digit sends it. The watch shows **Paired**.
+   Trio has given it a random key that signs every request from now on; the PIN isn't stored on the watch.
 
-   <img src="screenshots/13-set-pin.png" width="220">
+3. **Trio:** turn **Allow Bolus from Garmin** on.
 
-3. After installing a new version of the watch app, open it once from the apps list so the face can launch it.
+4. After installing a new version of the watch app, open it once from the apps list so the face can launch it.
+
+To stop a watch from bolusing, tap **Unpair Watch** in Trio.
 
 ## Give a bolus
 
@@ -66,16 +71,25 @@ Nothing is saved or delivered, and the watch shows why.
 
 Trio rejects a watch request when:
 
-- watch bolus is turned off in Trio, or no PIN is set;
-- the PIN on the watch doesn't match Trio's;
+- watch bolus is turned off in Trio, or no watch is paired;
+- it isn't signed with the paired watch's key. After **5 wrong requests in a row** (or wrong PINs while
+  pairing) Trio turns watch bolus off and notifies you; turn it back on in Trio if it was you;
 - the request is more than 60 seconds old or was already used (it can't be replayed);
 - another watch request is still in progress;
-- carbs are over Trio's **Max Carbs**, or insulin is over the **watch maximum**;
+- carbs are over the **watch carb max** or Trio's **Max Carbs**, or insulin is over the **watch maximum**;
+- the dose rounds down to 0 at the pump's step;
 - insulin is over the pump's **Max Bolus**, would go over **Max IOB**, or a bolus of 20 % or more of this one was
   given in the last few minutes.
 
-If the watch shows **Check Trio**, it couldn't confirm what happened (no reply, or the message may not have arrived).
-Look at Trio before trying again; the watch never resends on its own.
+If the watch shows **Check Trio**, it couldn't confirm what happened: no reply, the message may not have arrived, or
+the pump reported a problem after Trio accepted the request (some insulin may have gone in). Look at Trio before
+trying again; the watch never resends on its own. If the message says carbs were logged, don't send them again.
+
+On the bolus screens, IOB is marked "(old)" (and greyed on the face) when Trio's loop data is more than 15 minutes old.
+
+## In Trio
+
+Trio posts a notification for every bolus and carb entry from the watch, and when a watch is paired.
 
 ## In Trio
 

@@ -7,4 +7,6 @@ module BolusDemo {
     }
 
     function respond(id as String, centiUnits as Number) as Void {}
+
+    function respondPair(id as String) as Void {}
 }
