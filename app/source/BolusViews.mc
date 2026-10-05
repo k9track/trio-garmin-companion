@@ -391,7 +391,7 @@ class PinView extends WatchUi.View {
         }
         centerText(dc, (h * 0.37).toNumber(), Graphics.FONT_LARGE, C_DIM, shown);
         centerText(dc, (h * 0.55).toNumber(), Graphics.FONT_NUMBER_MEDIUM, C_SEL, choice.toString());
-        centerText(dc, (h * 0.71).toNumber(), Graphics.FONT_XTINY, C_DIM, "Tap Pair Watch in Trio, then its PIN");
+        centerText(dc, (h * 0.71).toNumber(), Graphics.FONT_XTINY, C_DIM, "Pair Watch in Trio first");
         centerText(dc, (h * 0.81).toNumber(), Graphics.FONT_XTINY, C_DIM, "START add  BACK del");
     }
 }
